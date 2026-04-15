@@ -2414,6 +2414,9 @@ type HTTPGetAction struct {
 	// Optional: Custom headers to set in the request. HTTP allows repeated headers.
 	// +optional
 	HTTPHeaders []HTTPHeader
+	// When true, the probe uses HTTP/2 without TLS (h2c). When false or unset, behavior is unchanged (HTTP/1.1).
+	// +optional
+	HTTP2Cleartext *bool
 }
 
 // URIScheme identifies the scheme used for connection to a host for Get actions

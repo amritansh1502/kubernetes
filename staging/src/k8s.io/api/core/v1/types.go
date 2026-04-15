@@ -2651,6 +2651,11 @@ type HTTPGetAction struct {
 	// +optional
 	// +listType=atomic
 	HTTPHeaders []HTTPHeader `json:"httpHeaders,omitempty" protobuf:"bytes,5,rep,name=httpHeaders"`
+	// When true, the probe uses HTTP/2 without TLS (h2c) to connect to the container.
+	// When false or unset, behavior is unchanged from today (HTTP/1.1 over cleartext when scheme is HTTP).
+	// This field requires the H2CContainerProbe feature gate to be enabled.
+	// +optional
+	HTTP2Cleartext *bool `json:"http2Cleartext,omitempty" protobuf:"varint,6,opt,name=http2Cleartext"`
 }
 
 // URIScheme identifies the scheme used for connection to a host for Get actions
