@@ -3470,6 +3470,14 @@ func validateHTTPGetAction(http *core.HTTPGetAction, fldPath *field.Path) field.
 	if !supportedHTTPSchemes.Has(http.Scheme) {
 		allErrors = append(allErrors, field.NotSupported(fldPath.Child("scheme"), http.Scheme, sets.List(supportedHTTPSchemes)))
 	}
+	if http.HTTP2Cleartext != nil && *http.HTTP2Cleartext {
+		if !utilfeature.DefaultFeatureGate.Enabled(features.H2CContainerProbe) {
+			allErrors = append(allErrors, field.Forbidden(fldPath.Child("http2Cleartext"), "only supported when the H2CContainerProbe feature gate is enabled"))
+		}
+		if http.Scheme == core.URISchemeHTTPS {
+			allErrors = append(allErrors, field.Invalid(fldPath.Child("http2Cleartext"), true, "may not be used with scheme HTTPS; HTTP/2 cleartext (h2c) requires HTTP scheme"))
+		}
+	}
 	for _, header := range http.HTTPHeaders {
 		for _, msg := range validation.IsHTTPHeaderName(header.Name) {
 			allErrors = append(allErrors, field.Invalid(fldPath.Child("httpHeaders"), header.Name, msg))

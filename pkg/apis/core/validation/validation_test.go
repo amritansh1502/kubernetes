@@ -7899,6 +7899,91 @@ func TestValidateHandler(t *testing.T) {
 	}
 }
 
+func TestValidateHTTPGetHTTP2Cleartext(t *testing.T) {
+	fldPath := field.NewPath("httpGet")
+	base := func() *core.HTTPGetAction {
+		return &core.HTTPGetAction{
+			Path:   "/healthz",
+			Port:   intstr.FromInt32(8080),
+			Scheme: core.URISchemeHTTP,
+		}
+	}
+
+	tests := []struct {
+		desc        string
+		gateEnabled bool
+		adjust      func(*core.HTTPGetAction)
+		assertErrs  func(t *testing.T, errs field.ErrorList)
+	}{
+		{
+			desc:        "forbidden when gate disabled but cleartext requested",
+			gateEnabled: false,
+			adjust:      func(h *core.HTTPGetAction) { h.HTTP2Cleartext = ptr.To(true) },
+			assertErrs: func(t *testing.T, errs field.ErrorList) {
+				require.Len(t, errs, 1, prettyErrorList(errs))
+				assert.Equal(t, field.ErrorTypeForbidden, errs[0].Type)
+				assert.Equal(t, fldPath.Child("http2Cleartext").String(), errs[0].Field)
+			},
+		},
+		{
+			desc:        "invalid when cleartext combined with HTTPS even if gate enabled",
+			gateEnabled: true,
+			adjust: func(h *core.HTTPGetAction) {
+				h.Scheme = core.URISchemeHTTPS
+				h.HTTP2Cleartext = ptr.To(true)
+			},
+			assertErrs: func(t *testing.T, errs field.ErrorList) {
+				require.Len(t, errs, 1, prettyErrorList(errs))
+				assert.Equal(t, field.ErrorTypeInvalid, errs[0].Type)
+				assert.Equal(t, fldPath.Child("http2Cleartext").String(), errs[0].Field)
+			},
+		},
+		{
+			desc:        "no error when cleartext true with HTTP and gate enabled",
+			gateEnabled: true,
+			adjust:      func(h *core.HTTPGetAction) { h.HTTP2Cleartext = ptr.To(true) },
+			assertErrs: func(t *testing.T, errs field.ErrorList) {
+				assert.Empty(t, errs, prettyErrorList(errs))
+			},
+		},
+		{
+			desc:        "explicit cleartext false does not require gate",
+			gateEnabled: false,
+			adjust:      func(h *core.HTTPGetAction) { h.HTTP2Cleartext = ptr.To(false) },
+			assertErrs: func(t *testing.T, errs field.ErrorList) {
+				assert.Empty(t, errs, prettyErrorList(errs))
+			},
+		},
+		{
+			desc:        "omitted cleartext unchanged when gate disabled",
+			gateEnabled: false,
+			adjust:      func(*core.HTTPGetAction) {},
+			assertErrs: func(t *testing.T, errs field.ErrorList) {
+				assert.Empty(t, errs, prettyErrorList(errs))
+			},
+		},
+		{
+			desc:        "cleartext with named port is still HTTPGet validation only",
+			gateEnabled: true,
+			adjust: func(h *core.HTTPGetAction) {
+				h.Port = intstr.FromString("metrics")
+				h.HTTP2Cleartext = ptr.To(true)
+			},
+			assertErrs: func(t *testing.T, errs field.ErrorList) {
+				assert.Empty(t, errs, prettyErrorList(errs))
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.H2CContainerProbe, tt.gateEnabled)
+			h := base()
+			tt.adjust(h)
+			tt.assertErrs(t, validateHTTPGetAction(h, fldPath))
+		})
+	}
+}
+
 func TestValidatePullPolicy(t *testing.T) {
 	type T struct {
 		Container      core.Container
