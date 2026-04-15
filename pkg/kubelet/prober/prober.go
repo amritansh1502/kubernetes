@@ -23,7 +23,9 @@ import (
 	"time"
 
 	v1 "k8s.io/api/core/v1"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/kubernetes/pkg/features"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 	"k8s.io/kubernetes/pkg/kubelet/events"
 	"k8s.io/kubernetes/pkg/kubelet/prober/results"
@@ -44,6 +46,7 @@ const maxProbeRetries = 3
 type prober struct {
 	exec   execprobe.Prober
 	http   httpprobe.Prober
+	h2c    httpprobe.Prober
 	tcp    tcpprobe.Prober
 	grpc   grpcprobe.Prober
 	runner kubecontainer.CommandRunner
@@ -61,6 +64,7 @@ func newProber(
 	return &prober{
 		exec:     execprobe.New(),
 		http:     httpprobe.New(followNonLocalRedirects),
+		h2c:      httpprobe.NewH2CProber(),
 		tcp:      tcpprobe.New(),
 		grpc:     grpcprobe.New(),
 		runner:   runner,
@@ -164,13 +168,20 @@ func (pb *prober) runProbe(ctx context.Context, probeType probeType, p *v1.Probe
 			logger.V(4).Info("HTTP-Probe failed to create request", "error", err)
 			return probe.Unknown, "", err
 		}
+		useH2C := p.HTTPGet.HTTP2Cleartext != nil && *p.HTTPGet.HTTP2Cleartext
 		if loggerV4 := logger.V(4); logger.Enabled() {
 			port := req.URL.Port()
 			host := req.URL.Hostname()
 			path := req.URL.Path
 			scheme := req.URL.Scheme
 			headers := p.HTTPGet.HTTPHeaders
-			loggerV4.Info("HTTP-Probe", "scheme", scheme, "host", host, "port", port, "path", path, "timeout", timeout, "headers", headers, "probeType", probeType)
+			loggerV4.Info("HTTP-Probe", "scheme", scheme, "host", host, "port", port, "path", path, "timeout", timeout, "headers", headers, "probeType", probeType, "http2Cleartext", useH2C)
+		}
+		if useH2C {
+			if !utilfeature.DefaultFeatureGate.Enabled(features.H2CContainerProbe) {
+				return probe.Unknown, "", fmt.Errorf("HTTP2Cleartext requires H2CContainerProbe feature gate to be enabled")
+			}
+			return pb.h2c.Probe(req, timeout)
 		}
 		return pb.http.Probe(req, timeout)
 

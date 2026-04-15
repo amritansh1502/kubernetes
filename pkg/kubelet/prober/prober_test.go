@@ -359,6 +359,7 @@ func TestNewProber(t *testing.T) {
 
 	assert.NotNil(t, prober.exec, "exec probe initialized")
 	assert.NotNil(t, prober.http, "http probe initialized")
+	assert.NotNil(t, prober.h2c, "h2c probe initialized")
 	assert.NotNil(t, prober.tcp, "tcp probe initialized")
 	assert.NotNil(t, prober.grpc, "grpc probe initialized")
 

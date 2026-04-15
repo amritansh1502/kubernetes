@@ -503,6 +503,7 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 			c.FillNoCustom(http)            // fuzz self without calling this function again
 			http.Path = "/" + http.Path     // can't be blank
 			http.Scheme = "x" + http.Scheme // can't be blank
+			http.HTTP2Cleartext = nil       // avoid random h2c + scheme combinations in round-trips
 		},
 		func(ss *core.ServiceSpec, c randfill.Continue) {
 			c.FillNoCustom(ss) // fuzz self without calling this function again

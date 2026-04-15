@@ -30,6 +30,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/http2"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -572,4 +574,108 @@ func TestHTTPProbeChecker_PayloadNormal(t *testing.T) {
 		assert.Equal(t, probe.Success, result)
 		assert.Equal(t, string(normalPayload), body)
 	})
+}
+
+func startH2CServer(t *testing.T, handler http.Handler) (addr string, cleanup func()) {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	h2s := &http2.Server{}
+	base := &http.Server{Handler: handler}
+	go func() {
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				return
+			}
+			cc := c
+			go func() {
+				h2s.ServeConn(cc, &http2.ServeConnOpts{
+					Handler:    handler,
+					BaseConfig: base,
+				})
+			}()
+		}
+	}()
+	return l.Addr().String(), func() { _ = l.Close() }
+}
+
+func TestH2CProberProbe(t *testing.T) {
+	tests := []struct {
+		name       string
+		reqURL     string
+		noServer   bool
+		handler    http.Handler
+		timeout    time.Duration
+		wantResult probe.Result
+		wantSubstr string
+	}{
+		{
+			name:       "refused TCP yields failure with dial detail",
+			reqURL:     "http://127.0.0.1:1/healthz",
+			noServer:   true,
+			timeout:    time.Second,
+			wantResult: probe.Failure,
+			wantSubstr: "dial tcp",
+		},
+		{
+			name: "h2c server 200 returns body via same DoHTTPProbe path as HTTP/1",
+			handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.ProtoMajor != 2 {
+					t.Errorf("expected HTTP/2 request, got proto major %d", r.ProtoMajor)
+				}
+				w.WriteHeader(http.StatusOK)
+				_, _ = fmt.Fprint(w, "healthy")
+			}),
+			timeout:    5 * time.Second,
+			wantResult: probe.Success,
+			wantSubstr: "healthy",
+		},
+		{
+			name: "non-success status maps to failure message without body leak",
+			handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_, _ = fmt.Fprint(w, "secret-body")
+			}),
+			timeout:    5 * time.Second,
+			wantResult: probe.Failure,
+			wantSubstr: "503",
+		},
+		{
+			name: "client timeout surfaces as failure not transport panic",
+			handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				time.Sleep(10 * time.Second)
+				w.WriteHeader(http.StatusOK)
+			}),
+			timeout:    500 * time.Millisecond,
+			wantResult: probe.Failure,
+			// net/http returns this substring when http.Client.Timeout elapses before headers.
+			wantSubstr: "Client.Timeout exceeded",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := NewH2CProber()
+			var req *http.Request
+			var err error
+			if tt.noServer {
+				req, err = http.NewRequest(http.MethodGet, tt.reqURL, nil)
+				require.NoError(t, err)
+			} else {
+				addr, cleanup := startH2CServer(t, tt.handler)
+				t.Cleanup(cleanup)
+				time.Sleep(2 * time.Second)
+				req, err = http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s/probe", addr), nil)
+				require.NoError(t, err)
+			}
+			res, msg, probeErr := p.Probe(req, tt.timeout)
+			assert.NoError(t, probeErr)
+			assert.Equal(t, tt.wantResult, res)
+			if tt.wantSubstr != "" {
+				assert.Contains(t, msg, tt.wantSubstr)
+			}
+		})
+	}
 }

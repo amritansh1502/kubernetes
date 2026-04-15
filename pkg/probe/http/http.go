@@ -20,9 +20,11 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"time"
 
+	"golang.org/x/net/http2"
 	utilnet "k8s.io/apimachinery/pkg/util/net"
 	"k8s.io/kubernetes/pkg/probe"
 
@@ -137,5 +139,37 @@ func RedirectChecker(followNonLocalRedirects bool) func(*http.Request, []*http.R
 			return errors.New("stopped after 10 redirects")
 		}
 		return nil
+	}
+}
+
+// -- HTTP/2 cleartext (h2c) for httpGet.http2Cleartext --
+
+type h2cProber struct {
+	transport *http2.Transport
+}
+
+// NewH2CProber returns a Prober that performs GET requests using HTTP/2 cleartext (h2c).
+// It shares response handling with the HTTP/1.1 prober via DoHTTPProbe.
+func NewH2CProber() Prober {
+	return h2cProber{transport: newH2CTransport()}
+}
+
+func (pr h2cProber) Probe(req *http.Request, timeout time.Duration) (probe.Result, string, error) {
+	const followNonLocalRedirects = false
+	client := &http.Client{
+		Timeout:       timeout,
+		Transport:     pr.transport,
+		CheckRedirect: RedirectChecker(followNonLocalRedirects),
+	}
+	return DoHTTPProbe(req, client)
+}
+
+func newH2CTransport() *http2.Transport {
+	dialer := probe.ProbeDialer()
+	return &http2.Transport{
+		AllowHTTP: true,
+		DialTLS: func(network, addr string, _ *tls.Config) (net.Conn, error) {
+			return dialer.Dial(network, addr)
+		},
 	}
 }
