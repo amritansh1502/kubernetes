@@ -4755,6 +4755,16 @@ func (m *HTTPGetAction) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.HTTP2Cleartext != nil {
+		i--
+		if *m.HTTP2Cleartext {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x30
+	}
 	if len(m.HTTPHeaders) > 0 {
 		for iNdEx := len(m.HTTPHeaders) - 1; iNdEx >= 0; iNdEx-- {
 			{
@@ -16641,6 +16651,9 @@ func (m *HTTPGetAction) Size() (n int) {
 			n += 1 + l + sovGenerated(uint64(l))
 		}
 	}
+	if m.HTTP2Cleartext != nil {
+		n += 2
+	}
 	return n
 }
 
@@ -21600,6 +21613,7 @@ func (this *HTTPGetAction) String() string {
 		`Host:` + fmt.Sprintf("%v", this.Host) + `,`,
 		`Scheme:` + fmt.Sprintf("%v", this.Scheme) + `,`,
 		`HTTPHeaders:` + repeatedStringForHTTPHeaders + `,`,
+		`HTTP2Cleartext:` + valueToStringGenerated(this.HTTP2Cleartext) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -38014,6 +38028,27 @@ func (m *HTTPGetAction) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field HTTP2Cleartext", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowGenerated
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			b := bool(v != 0)
+			m.HTTP2Cleartext = &b
 		default:
 			iNdEx = preIndex
 			skippy, err := skipGenerated(dAtA[iNdEx:])

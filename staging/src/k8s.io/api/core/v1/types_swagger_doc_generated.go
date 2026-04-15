@@ -893,12 +893,13 @@ func (GlusterfsVolumeSource) SwaggerDoc() map[string]string {
 }
 
 var map_HTTPGetAction = map[string]string{
-	"":            "HTTPGetAction describes an action based on HTTP Get requests.",
-	"path":        "Path to access on the HTTP server.",
-	"port":        "Name or number of the port to access on the container. Number must be in the range 1 to 65535. Name must be an IANA_SVC_NAME.",
-	"host":        "Host name to connect to, defaults to the pod IP. You probably want to set \"Host\" in httpHeaders instead.",
-	"scheme":      "Scheme to use for connecting to the host. Defaults to HTTP.",
-	"httpHeaders": "Custom headers to set in the request. HTTP allows repeated headers.",
+	"":               "HTTPGetAction describes an action based on HTTP Get requests.",
+	"path":           "Path to access on the HTTP server.",
+	"port":           "Name or number of the port to access on the container. Number must be in the range 1 to 65535. Name must be an IANA_SVC_NAME.",
+	"host":           "Host name to connect to, defaults to the pod IP. You probably want to set \"Host\" in httpHeaders instead.",
+	"scheme":         "Scheme to use for connecting to the host. Defaults to HTTP.",
+	"httpHeaders":    "Custom headers to set in the request. HTTP allows repeated headers.",
+	"http2Cleartext": "When true, the probe uses HTTP/2 without TLS (h2c) to connect to the container. When false or unset, behavior is unchanged from today (HTTP/1.1 over cleartext when scheme is HTTP). This field requires the H2CContainerProbe feature gate to be enabled.",
 }
 
 func (HTTPGetAction) SwaggerDoc() map[string]string {

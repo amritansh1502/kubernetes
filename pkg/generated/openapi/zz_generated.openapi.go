@@ -23689,6 +23689,13 @@ func schema_k8sio_api_core_v1_HTTPGetAction(ref common.ReferenceCallback) common
 							},
 						},
 					},
+					"http2Cleartext": {
+						SchemaProps: spec.SchemaProps{
+							Description: "When true, the probe uses HTTP/2 without TLS (h2c) to connect to the container. When false or unset, behavior is unchanged from today (HTTP/1.1 over cleartext when scheme is HTTP). This field requires the H2CContainerProbe feature gate to be enabled.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
 				},
 				Required: []string{"port"},
 			},

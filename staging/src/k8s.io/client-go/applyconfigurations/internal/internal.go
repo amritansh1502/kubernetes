@@ -5590,6 +5590,9 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: host
       type:
         scalar: string
+    - name: http2Cleartext
+      type:
+        scalar: boolean
     - name: httpHeaders
       type:
         list:

@@ -42,6 +42,10 @@ type HTTPGetActionApplyConfiguration struct {
 	Scheme *corev1.URIScheme `json:"scheme,omitempty"`
 	// Custom headers to set in the request. HTTP allows repeated headers.
 	HTTPHeaders []HTTPHeaderApplyConfiguration `json:"httpHeaders,omitempty"`
+	// When true, the probe uses HTTP/2 without TLS (h2c) to connect to the container.
+	// When false or unset, behavior is unchanged from today (HTTP/1.1 over cleartext when scheme is HTTP).
+	// This field requires the H2CContainerProbe feature gate to be enabled.
+	HTTP2Cleartext *bool `json:"http2Cleartext,omitempty"`
 }
 
 // HTTPGetActionApplyConfiguration constructs a declarative configuration of the HTTPGetAction type for use with
@@ -92,5 +96,13 @@ func (b *HTTPGetActionApplyConfiguration) WithHTTPHeaders(values ...*HTTPHeaderA
 		}
 		b.HTTPHeaders = append(b.HTTPHeaders, *values[i])
 	}
+	return b
+}
+
+// WithHTTP2Cleartext sets the HTTP2Cleartext field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the HTTP2Cleartext field is set to the value of the last call.
+func (b *HTTPGetActionApplyConfiguration) WithHTTP2Cleartext(value bool) *HTTPGetActionApplyConfiguration {
+	b.HTTP2Cleartext = &value
 	return b
 }

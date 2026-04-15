@@ -2005,6 +2005,11 @@ func (in *HTTPGetAction) DeepCopyInto(out *HTTPGetAction) {
 		*out = make([]HTTPHeader, len(*in))
 		copy(*out, *in)
 	}
+	if in.HTTP2Cleartext != nil {
+		in, out := &in.HTTP2Cleartext, &out.HTTP2Cleartext
+		*out = new(bool)
+		**out = **in
+	}
 	return
 }
 
