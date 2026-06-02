@@ -812,6 +812,7 @@ func dropDisabledFields(
 	dropImageVolumes(podSpec, oldPodSpec)
 	dropSELinuxChangePolicy(podSpec, oldPodSpec)
 	dropContainerStopSignals(podSpec, oldPodSpec)
+	dropHTTPProbeProtocol(podSpec, oldPodSpec)
 }
 
 // setHostnameOverrideInUse returns true if any pod's spec defines HostnameOverride field.
@@ -893,6 +894,64 @@ func containerStopSignalsInUse(podSpec *api.PodSpec) bool {
 		if c.Lifecycle.StopSignal != nil {
 			inUse = true
 			return false
+		}
+		return true
+	})
+	return inUse
+}
+
+func dropHTTPProbeProtocol(podSpec, oldPodSpec *api.PodSpec) {
+	if utilfeature.DefaultFeatureGate.Enabled(features.HTTPProbeProtocol) || httpProbeProtocolInUse(oldPodSpec) {
+		return
+	}
+
+	clearProtocol := func(action *api.HTTPGetAction) {
+		if action != nil {
+			action.Protocol = nil
+		}
+	}
+
+	VisitContainers(podSpec, AllContainers, func(c *api.Container, _ ContainerType) bool {
+		if c.LivenessProbe != nil && c.LivenessProbe.HTTPGet != nil {
+			clearProtocol(c.LivenessProbe.HTTPGet)
+		}
+		if c.ReadinessProbe != nil && c.ReadinessProbe.HTTPGet != nil {
+			clearProtocol(c.ReadinessProbe.HTTPGet)
+		}
+		if c.StartupProbe != nil && c.StartupProbe.HTTPGet != nil {
+			clearProtocol(c.StartupProbe.HTTPGet)
+		}
+		if c.Lifecycle != nil {
+			if c.Lifecycle.PostStart != nil && c.Lifecycle.PostStart.HTTPGet != nil {
+				clearProtocol(c.Lifecycle.PostStart.HTTPGet)
+			}
+			if c.Lifecycle.PreStop != nil && c.Lifecycle.PreStop.HTTPGet != nil {
+				clearProtocol(c.Lifecycle.PreStop.HTTPGet)
+			}
+		}
+		return true
+	})
+}
+
+func httpProbeProtocolInUse(podSpec *api.PodSpec) bool {
+	if podSpec == nil {
+		return false
+	}
+	var inUse bool
+	VisitContainers(podSpec, AllContainers, func(c *api.Container, _ ContainerType) bool {
+		for _, probe := range []*api.Probe{c.LivenessProbe, c.ReadinessProbe, c.StartupProbe} {
+			if probe != nil && probe.HTTPGet != nil && probe.HTTPGet.Protocol != nil {
+				inUse = true
+				return false
+			}
+		}
+		if c.Lifecycle != nil {
+			for _, handler := range []*api.LifecycleHandler{c.Lifecycle.PostStart, c.Lifecycle.PreStop} {
+				if handler != nil && handler.HTTPGet != nil && handler.HTTPGet.Protocol != nil {
+					inUse = true
+					return false
+				}
+			}
 		}
 		return true
 	})

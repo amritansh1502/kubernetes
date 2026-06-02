@@ -3453,6 +3453,7 @@ func validateExecAction(exec *core.ExecAction, fldPath *field.Path) field.ErrorL
 }
 
 var supportedHTTPSchemes = sets.New(core.URISchemeHTTP, core.URISchemeHTTPS)
+var supportedHTTPProbeProtocols = sets.New(core.HTTPProbeProtocolHTTP1, core.HTTPProbeProtocolHTTP2)
 
 func validateHTTPGetAction(http *core.HTTPGetAction, fldPath *field.Path) field.ErrorList {
 	allErrors := field.ErrorList{}
@@ -3466,6 +3467,17 @@ func validateHTTPGetAction(http *core.HTTPGetAction, fldPath *field.Path) field.
 	for _, header := range http.HTTPHeaders {
 		for _, msg := range validation.IsHTTPHeaderName(header.Name) {
 			allErrors = append(allErrors, field.Invalid(fldPath.Child("httpHeaders"), header.Name, msg))
+		}
+	}
+	if http.Protocol != nil {
+		if !utilfeature.DefaultFeatureGate.Enabled(features.HTTPProbeProtocol) {
+			allErrors = append(allErrors, field.Forbidden(fldPath.Child("protocol"), "only supported when the HTTPProbeProtocol feature gate is enabled"))
+		} else if !supportedHTTPProbeProtocols.Has(*http.Protocol) {
+			allErrors = append(allErrors, field.NotSupported(fldPath.Child("protocol"), *http.Protocol, sets.List(supportedHTTPProbeProtocols)))
+		} else if *http.Protocol == core.HTTPProbeProtocolHTTP2 && http.Scheme == core.URISchemeHTTPS {
+			allErrors = append(allErrors, field.Invalid(fldPath.Child("protocol"), *http.Protocol, "HTTP2 cannot be combined with scheme HTTPS"))
+		} else if *http.Protocol == core.HTTPProbeProtocolHTTP2 && len(http.Host) > 0 {
+			allErrors = append(allErrors, field.Invalid(fldPath.Child("host"), http.Host, "host must be empty when protocol is HTTP2"))
 		}
 	}
 	return allErrors

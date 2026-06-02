@@ -29,6 +29,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/apimachinery/pkg/util/version"
@@ -4063,6 +4064,81 @@ func TestDropContainerStopSignals(t *testing.T) {
 				}
 			}
 
+		})
+	}
+}
+
+func TestDropHTTPProbeProtocol(t *testing.T) {
+	h2c := api.HTTPProbeProtocolHTTP2
+
+	makePodSpec := func(proto *api.HTTPProbeProtocol) *api.PodSpec {
+		return &api.PodSpec{
+			Containers: []api.Container{{
+				Name: "test",
+				LivenessProbe: &api.Probe{
+					ProbeHandler: api.ProbeHandler{
+						HTTPGet: &api.HTTPGetAction{
+							Path:     "/",
+							Port:     intstr.FromInt32(80),
+							Scheme:   api.URISchemeHTTP,
+							Protocol: proto,
+						},
+					},
+				},
+			}},
+		}
+	}
+
+	tests := []struct {
+		name             string
+		gateEnabled      bool
+		oldProto         *api.HTTPProbeProtocol
+		newProto         *api.HTTPProbeProtocol
+		expectedProto    *api.HTTPProbeProtocol
+	}{
+		{
+			name:          "gate on, protocol set - keep",
+			gateEnabled:   true,
+			oldProto:      nil,
+			newProto:      &h2c,
+			expectedProto: &h2c,
+		},
+		{
+			name:          "gate off, old had protocol - keep (in use)",
+			gateEnabled:   false,
+			oldProto:      &h2c,
+			newProto:      &h2c,
+			expectedProto: &h2c,
+		},
+		{
+			name:          "gate off, old did not have protocol - drop",
+			gateEnabled:   false,
+			oldProto:      nil,
+			newProto:      &h2c,
+			expectedProto: nil,
+		},
+		{
+			name:          "gate off, both nil - no change",
+			gateEnabled:   false,
+			oldProto:      nil,
+			newProto:      nil,
+			expectedProto: nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.HTTPProbeProtocol, tc.gateEnabled)
+
+			oldPodSpec := makePodSpec(tc.oldProto)
+			newPodSpec := makePodSpec(tc.newProto)
+			expectedPodSpec := makePodSpec(tc.expectedProto)
+
+			dropDisabledFields(newPodSpec, nil, oldPodSpec, nil)
+
+			if diff := cmp.Diff(expectedPodSpec, newPodSpec); diff != "" {
+				t.Fatalf("unexpected result (-want +got):\n%s", diff)
+			}
 		})
 	}
 }
