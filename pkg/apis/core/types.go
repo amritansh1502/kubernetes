@@ -2407,6 +2407,17 @@ type HTTPHeader struct {
 	Value string
 }
 
+// HTTPProbeProtocol selects the HTTP protocol version used for probe connections.
+type HTTPProbeProtocol string
+
+const (
+	// HTTPProbeProtocolHTTP1 uses HTTP/1.1 (the existing default).
+	HTTPProbeProtocolHTTP1 HTTPProbeProtocol = "HTTP1"
+	// HTTPProbeProtocolHTTP2 uses HTTP/2 cleartext (h2c) with prior knowledge.
+	// Can only be used with scheme HTTP.
+	HTTPProbeProtocolHTTP2 HTTPProbeProtocol = "HTTP2"
+)
+
 // HTTPGetAction describes an action based on HTTP Get requests.
 type HTTPGetAction struct {
 	// Optional: Path to access on the HTTP server.
@@ -2425,6 +2436,10 @@ type HTTPGetAction struct {
 	// Optional: Custom headers to set in the request. HTTP allows repeated headers.
 	// +optional
 	HTTPHeaders []HTTPHeader
+	// Protocol selects the wire protocol for the probe connection.
+	// Nil defaults to HTTP/1.1. Requires the HTTPProbeProtocol feature gate.
+	// +optional
+	Protocol *HTTPProbeProtocol
 }
 
 // URIScheme identifies the scheme used for connection to a host for Get actions

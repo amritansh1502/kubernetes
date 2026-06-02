@@ -23716,6 +23716,14 @@ func schema_k8sio_api_core_v1_HTTPGetAction(ref common.ReferenceCallback) common
 							},
 						},
 					},
+					"protocol": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Protocol selects the wire protocol for the probe connection. Nil defaults to HTTP/1.1. Requires the HTTPProbeProtocol feature gate to be enabled.\n\nPossible enum values:\n - `\"HTTP1\"` uses HTTP/1.1 (the existing default).\n - `\"HTTP2\"` uses HTTP/2. Combined with scheme HTTP this is h2c (cleartext with prior knowledge).",
+							Type:        []string{"string"},
+							Format:      "",
+							Enum:        []interface{}{"HTTP1", "HTTP2"},
+						},
+					},
 				},
 				Required: []string{"port"},
 			},
