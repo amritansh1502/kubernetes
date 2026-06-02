@@ -58,24 +58,42 @@ func NewWithTLSConfig(config *tls.Config, followNonLocalRedirects bool) Prober {
 			DialContext: probe.ProbeDialer().DialContext,
 		})
 
-	return httpProber{transport, followNonLocalRedirects}
+	h2cTransport := &http.Transport{
+		DialContext: probe.ProbeDialer().DialContext,
+	}
+	h2cTransport.Protocols = new(http.Protocols)
+	h2cTransport.Protocols.SetUnencryptedHTTP2(true)
+
+	return httpProber{transport, h2cTransport, followNonLocalRedirects}
 }
 
 // Prober is an interface that defines the Probe function for doing HTTP readiness/liveness checks.
 type Prober interface {
 	Probe(req *http.Request, timeout time.Duration) (probe.Result, string, error)
+	ProbeHTTP2(req *http.Request, timeout time.Duration) (probe.Result, string, error)
 }
 
 type httpProber struct {
 	transport               *http.Transport
+	h2cTransport            *http.Transport
 	followNonLocalRedirects bool
 }
 
-// Probe returns a ProbeRunner capable of running an HTTP check.
+// Probe returns a ProbeRunner capable of running an HTTP/1.1 check.
 func (pr httpProber) Probe(req *http.Request, timeout time.Duration) (probe.Result, string, error) {
 	client := &http.Client{
 		Timeout:       timeout,
 		Transport:     pr.transport,
+		CheckRedirect: RedirectChecker(pr.followNonLocalRedirects),
+	}
+	return DoHTTPProbe(req, client)
+}
+
+// ProbeHTTP2 runs an HTTP probe over HTTP/2 cleartext (h2c) with prior knowledge.
+func (pr httpProber) ProbeHTTP2(req *http.Request, timeout time.Duration) (probe.Result, string, error) {
+	client := &http.Client{
+		Timeout:       timeout,
+		Transport:     pr.h2cTransport,
 		CheckRedirect: RedirectChecker(pr.followNonLocalRedirects),
 	}
 	return DoHTTPProbe(req, client)
