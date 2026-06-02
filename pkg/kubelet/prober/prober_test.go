@@ -18,6 +18,7 @@ package prober
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
@@ -29,8 +30,10 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	featuregatetesting "k8s.io/component-base/featuregate/testing"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
+	"k8s.io/kubernetes/pkg/features"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
 	containertest "k8s.io/kubernetes/pkg/kubelet/container/testing"
 	"k8s.io/kubernetes/pkg/kubelet/prober/results"
@@ -38,6 +41,7 @@ import (
 	"k8s.io/kubernetes/pkg/probe"
 	execprobe "k8s.io/kubernetes/pkg/probe/exec"
 	"k8s.io/kubernetes/test/utils/ktesting"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
 )
 
 func TestGetURLParts(t *testing.T) {
@@ -362,6 +366,43 @@ func TestNewProber(t *testing.T) {
 	assert.NotNil(t, prober.tcp, "tcp probe initialized")
 	assert.NotNil(t, prober.grpc, "grpc probe initialized")
 
+}
+
+func TestRunProbeHTTPGetHTTP2ProtocolFeatureGateDisabled(t *testing.T) {
+	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.HTTPProbeProtocol, false)
+
+	runner := &containertest.FakeContainerCommandRunner{}
+	recorder := &record.FakeRecorder{}
+	pb := newProber(runner, recorder)
+
+	http2 := v1.HTTPProbeProtocolHTTP2
+	pod := &v1.Pod{}
+	status := v1.PodStatus{PodIP: "127.0.0.1"}
+	container := v1.Container{}
+	containerID := kubecontainer.ContainerID{Type: "docker", ID: "cid"}
+	p := &v1.Probe{
+		ProbeHandler: v1.ProbeHandler{
+			HTTPGet: &v1.HTTPGetAction{
+				Path:     "/healthz",
+				Port:     intstr.FromInt32(8080),
+				Scheme:   v1.URISchemeHTTP,
+				Protocol: &http2,
+			},
+		},
+	}
+
+	res, msg, err := pb.runProbe(context.Background(), readiness, p, pod, status, container, containerID)
+	if res != probe.Unknown {
+		t.Errorf("got result %v, want %v", res, probe.Unknown)
+	}
+	if err == nil {
+		t.Errorf("expected error, got nil")
+	} else if !strings.Contains(err.Error(), "HTTPProbeProtocol") {
+		t.Errorf("error %q does not contain %q", err.Error(), "HTTPProbeProtocol")
+	}
+	if msg != "" {
+		t.Errorf("got message %q, want empty", msg)
+	}
 }
 
 func TestRecordContainerEventUnknownStatus(t *testing.T) {
