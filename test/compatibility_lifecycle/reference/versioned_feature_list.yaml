@@ -805,6 +805,12 @@
     lockToDefault: false
     preRelease: Alpha
     version: "1.16"
+- name: HTTPProbeProtocol
+  versionedSpecs:
+  - default: false
+    lockToDefault: false
+    preRelease: Alpha
+    version: "1.37"
 - name: ImageMaximumGCAge
   versionedSpecs:
   - default: false
