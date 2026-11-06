@@ -3470,9 +3470,10 @@ func validateHTTPGetAction(http *core.HTTPGetAction, fldPath *field.Path) field.
 		}
 	}
 	if http.Protocol != nil {
-		if !utilfeature.DefaultFeatureGate.Enabled(features.HTTPProbeProtocol) {
-			allErrors = append(allErrors, field.Forbidden(fldPath.Child("protocol"), "only supported when the HTTPProbeProtocol feature gate is enabled"))
-		} else if !supportedHTTPProbeProtocols.Has(*http.Protocol) {
+		// The HTTPProbeProtocol feature gate is enforced by dropping this field on
+		// create/update rather than rejecting it here, so that a value already in
+		// use survives an update made while the gate is disabled.
+		if !supportedHTTPProbeProtocols.Has(*http.Protocol) {
 			allErrors = append(allErrors, field.NotSupported(fldPath.Child("protocol"), *http.Protocol, sets.List(supportedHTTPProbeProtocols)))
 		} else if *http.Protocol == core.HTTPProbeProtocolHTTP2 && http.Scheme == core.URISchemeHTTPS {
 			allErrors = append(allErrors, field.Invalid(fldPath.Child("protocol"), *http.Protocol, "HTTP2 cannot be combined with scheme HTTPS"))

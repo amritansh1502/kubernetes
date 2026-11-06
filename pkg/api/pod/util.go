@@ -906,7 +906,14 @@ func dropHTTPProbeProtocol(podSpec, oldPodSpec *api.PodSpec) {
 	}
 
 	clearProtocol := func(action *api.HTTPGetAction) {
-		if action != nil {
+		if action == nil || action.Protocol == nil {
+			return
+		}
+		// Only drop supported values. Unsupported values must survive the drop
+		// so that validation can reject them with NotSupported, regardless of
+		// the feature gate state.
+		switch *action.Protocol {
+		case api.HTTPProbeProtocolHTTP1, api.HTTPProbeProtocolHTTP2:
 			action.Protocol = nil
 		}
 	}

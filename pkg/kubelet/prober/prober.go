@@ -174,11 +174,10 @@ func (pb *prober) runProbe(ctx context.Context, probeType probeType, p *v1.Probe
 			loggerV4.Info("HTTP-Probe", "scheme", scheme, "host", host, "port", port, "path", path, "timeout", timeout, "headers", headers, "probeType", probeType)
 		}
 		if p.HTTPGet.Protocol != nil && *p.HTTPGet.Protocol == v1.HTTPProbeProtocolHTTP2 {
-			if !utilfeature.DefaultFeatureGate.Enabled(features.HTTPProbeProtocol) {
-				logger.V(4).Info("HTTP-Probe with HTTP2 protocol skipped: feature gate disabled", "pod", klog.KObj(pod), "containerName", container.Name)
-				return probe.Unknown, "", fmt.Errorf("HTTPProbeProtocol feature gate is disabled")
+			if utilfeature.DefaultFeatureGate.Enabled(features.HTTPProbeProtocol) {
+				return pb.http.ProbeHTTP2(req, timeout)
 			}
-			return pb.http.ProbeHTTP2(req, timeout)
+			logger.V(4).Info("HTTP-Probe with HTTP2 protocol falling back to HTTP/1.1: feature gate disabled", "pod", klog.KObj(pod), "containerName", container.Name)
 		}
 		return pb.http.Probe(req, timeout)
 

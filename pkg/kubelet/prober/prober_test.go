@@ -21,17 +21,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	featuregatetesting "k8s.io/component-base/featuregate/testing"
+	"k8s.io/apimachinery/pkg/util/version"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/client-go/tools/record"
+	featuregatetesting "k8s.io/component-base/featuregate/testing"
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 	"k8s.io/kubernetes/pkg/features"
 	kubecontainer "k8s.io/kubernetes/pkg/kubelet/container"
@@ -41,7 +45,6 @@ import (
 	"k8s.io/kubernetes/pkg/probe"
 	execprobe "k8s.io/kubernetes/pkg/probe/exec"
 	"k8s.io/kubernetes/test/utils/ktesting"
-	utilfeature "k8s.io/apiserver/pkg/util/feature"
 )
 
 func TestGetURLParts(t *testing.T) {
@@ -368,12 +371,31 @@ func TestNewProber(t *testing.T) {
 
 }
 
+// fakeHTTPProber records which wire protocol runProbe dispatched to.
+type fakeHTTPProber struct {
+	calledHTTP1 bool
+	calledHTTP2 bool
+}
+
+func (f *fakeHTTPProber) Probe(req *http.Request, timeout time.Duration) (probe.Result, string, error) {
+	f.calledHTTP1 = true
+	return probe.Success, "", nil
+}
+
+func (f *fakeHTTPProber) ProbeHTTP2(req *http.Request, timeout time.Duration) (probe.Result, string, error) {
+	f.calledHTTP2 = true
+	return probe.Success, "", nil
+}
+
 func TestRunProbeHTTPGetHTTP2ProtocolFeatureGateDisabled(t *testing.T) {
+	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.38"))
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.HTTPProbeProtocol, false)
 
 	runner := &containertest.FakeContainerCommandRunner{}
 	recorder := &record.FakeRecorder{}
 	pb := newProber(runner, recorder)
+	fakeHTTP := &fakeHTTPProber{}
+	pb.http = fakeHTTP
 
 	http2 := v1.HTTPProbeProtocolHTTP2
 	pod := &v1.Pod{}
@@ -391,17 +413,20 @@ func TestRunProbeHTTPGetHTTP2ProtocolFeatureGateDisabled(t *testing.T) {
 		},
 	}
 
-	res, msg, err := pb.runProbe(context.Background(), readiness, p, pod, status, container, containerID)
-	if res != probe.Unknown {
-		t.Errorf("got result %v, want %v", res, probe.Unknown)
+	// A preserved protocol: HTTP2 field must not fail the probe once the
+	// feature gate is disabled; the prober falls back to HTTP/1.1 instead.
+	res, _, err := pb.runProbe(context.Background(), readiness, p, pod, status, container, containerID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if err == nil {
-		t.Errorf("expected error, got nil")
-	} else if !strings.Contains(err.Error(), "HTTPProbeProtocol") {
-		t.Errorf("error %q does not contain %q", err.Error(), "HTTPProbeProtocol")
+	if res != probe.Success {
+		t.Errorf("got result %v, want %v", res, probe.Success)
 	}
-	if msg != "" {
-		t.Errorf("got message %q, want empty", msg)
+	if !fakeHTTP.calledHTTP1 {
+		t.Errorf("expected fallback to the HTTP/1.1 prober when the feature gate is disabled")
+	}
+	if fakeHTTP.calledHTTP2 {
+		t.Errorf("expected the HTTP2 prober not to be called when the feature gate is disabled")
 	}
 }
 

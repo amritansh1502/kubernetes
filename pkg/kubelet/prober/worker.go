@@ -356,10 +356,13 @@ func (w *worker) doProbe(ctx context.Context) (keepGoing bool) {
 	case results.Success:
 		ProberResults.With(w.proberResultsSuccessfulMetricLabels).Inc()
 		ProberDuration.With(w.proberDurationSuccessfulMetricLabels).Observe(time.Since(startTime).Seconds())
+		w.recordProbeProtocolResult(probeResultSuccessful)
 	case results.Failure:
 		ProberResults.With(w.proberResultsFailedMetricLabels).Inc()
+		w.recordProbeProtocolResult(probeResultFailed)
 	default:
 		ProberResults.With(w.proberResultsUnknownMetricLabels).Inc()
+		w.recordProbeProtocolResult(probeResultUnknown)
 		ProberDuration.With(w.proberDurationUnknownMetricLabels).Observe(time.Since(startTime).Seconds())
 	}
 
@@ -391,6 +394,19 @@ func (w *worker) doProbe(ctx context.Context) (keepGoing bool) {
 	}
 
 	return true
+}
+
+// recordProbeProtocolResult records the ProbeProtocolResults metric for HTTP probes, broken down
+// by the HTTP wire protocol used, independent of the per-pod/container ProberResults metric.
+func (w *worker) recordProbeProtocolResult(result string) {
+	if w.spec.HTTPGet == nil {
+		return
+	}
+	protocol := string(v1.HTTPProbeProtocolHTTP1)
+	if w.spec.HTTPGet.Protocol != nil {
+		protocol = string(*w.spec.HTTPGet.Protocol)
+	}
+	ProbeProtocolResults.With(metrics.Labels{"protocol": protocol, "result": result}).Inc()
 }
 
 func deepCopyPrometheusLabels(m metrics.Labels) metrics.Labels {

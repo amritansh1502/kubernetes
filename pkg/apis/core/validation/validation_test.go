@@ -7900,6 +7900,7 @@ func TestValidateHandler(t *testing.T) {
 }
 
 func TestValidateHTTPGetActionProtocol(t *testing.T) {
+	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.38"))
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.HTTPProbeProtocol, true)
 
 	http1 := core.HTTPProbeProtocolHTTP1
@@ -7945,12 +7946,17 @@ func TestValidateHTTPGetActionProtocol(t *testing.T) {
 }
 
 func TestValidateHTTPGetActionProtocolFeatureGateDisabled(t *testing.T) {
+	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.38"))
 	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.HTTPProbeProtocol, false)
 
+	// The feature gate is enforced by dropping the field on create/update
+	// (see dropHTTPProbeProtocol), not by validation, so that a value already
+	// in use survives an update made while the gate is disabled. Validation
+	// only enforces the supported-value and HTTP2 compatibility constraints.
 	http2 := core.HTTPProbeProtocolHTTP2
 	h := core.ProbeHandler{HTTPGet: &core.HTTPGetAction{Path: "/", Port: intstr.FromInt32(80), Scheme: "HTTP", Protocol: &http2}}
-	if errs := validateHandler(handlerFromProbe(&h), defaultGracePeriod, field.NewPath("field"), PodValidationOptions{}); len(errs) == 0 {
-		t.Errorf("expected failure when HTTPProbeProtocol feature gate is disabled for %#v", h)
+	if errs := validateHandler(handlerFromProbe(&h), defaultGracePeriod, field.NewPath("field"), PodValidationOptions{}); len(errs) != 0 {
+		t.Errorf("expected success when HTTPProbeProtocol feature gate is disabled for %#v, got: %v", h, errs)
 	}
 }
 

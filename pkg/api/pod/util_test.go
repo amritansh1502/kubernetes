@@ -4069,6 +4069,7 @@ func TestDropContainerStopSignals(t *testing.T) {
 }
 
 func TestDropHTTPProbeProtocol(t *testing.T) {
+	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.38"))
 	h2c := api.HTTPProbeProtocolHTTP2
 
 	makePodSpec := func(proto *api.HTTPProbeProtocol) *api.PodSpec {
@@ -4090,11 +4091,11 @@ func TestDropHTTPProbeProtocol(t *testing.T) {
 	}
 
 	tests := []struct {
-		name             string
-		gateEnabled      bool
-		oldProto         *api.HTTPProbeProtocol
-		newProto         *api.HTTPProbeProtocol
-		expectedProto    *api.HTTPProbeProtocol
+		name          string
+		gateEnabled   bool
+		oldProto      *api.HTTPProbeProtocol
+		newProto      *api.HTTPProbeProtocol
+		expectedProto *api.HTTPProbeProtocol
 	}{
 		{
 			name:          "gate on, protocol set - keep",
@@ -4140,6 +4141,31 @@ func TestDropHTTPProbeProtocol(t *testing.T) {
 				t.Fatalf("unexpected result (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestDropHTTPProbeProtocolUnsupportedValue(t *testing.T) {
+	featuregatetesting.SetFeatureGateEmulationVersionDuringTest(t, utilfeature.DefaultFeatureGate, version.MustParse("1.38"))
+	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.HTTPProbeProtocol, false)
+
+	// Unsupported values must not be dropped, so that validation can reject
+	// them regardless of the feature gate state.
+	proto := api.HTTPProbeProtocol("SPDY")
+	podSpec := &api.PodSpec{
+		Containers: []api.Container{{
+			Name: "test",
+			LivenessProbe: &api.Probe{
+				ProbeHandler: api.ProbeHandler{
+					HTTPGet: &api.HTTPGetAction{Path: "/", Port: intstr.FromInt32(80), Scheme: api.URISchemeHTTP, Protocol: &proto},
+				},
+			},
+		}},
+	}
+
+	dropDisabledFields(podSpec, nil, nil, nil)
+
+	if got := podSpec.Containers[0].LivenessProbe.HTTPGet.Protocol; got == nil || *got != proto {
+		t.Fatalf("expected unsupported protocol to be preserved for validation, got %v", got)
 	}
 }
 
